@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "link2video"
+version = "0.1.0"
+description = "Turn Tencent Meeting recording links into local MP4/MKV videos with embedded soft subtitles and clickable chapters."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+]
+
+[project.scripts]
+link2video = "link2video.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["link2video*"]
