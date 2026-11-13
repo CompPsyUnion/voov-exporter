@@ -90,7 +90,7 @@ def probe_video_duration(
     if ffprobe_bin:
         res = subprocess.run(
             [ffprobe_bin, "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
         )
         if res.returncode == 0:
             try:

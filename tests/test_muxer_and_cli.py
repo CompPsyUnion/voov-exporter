@@ -39,9 +39,18 @@ def _make_sample_mp4(ffmpeg_bin: str, dest: Path, duration: int = 5) -> None:
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
         str(dest),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     if res.returncode != 0:
         raise RuntimeError(f"Failed to generate sample MP4: {res.stderr[-500:]}")
+
+
+def _probe_json(ffprobe_bin: str, media_path: Path, show_chapters: bool = False) -> Dict[str, Any]:
+    cmd = [ffprobe_bin, "-v", "error", "-show_streams"]
+    if show_chapters:
+        cmd.append("-show_chapters")
+    cmd.extend(["-of", "json", str(media_path)])
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
+    return json.loads(res.stdout)
 
 
 class _FakeHttpSession:
@@ -125,11 +134,7 @@ class TestMuxer(unittest.TestCase):
             for ext, expected_sub_codec in ((".mp4", "mov_text"), (".mkv", "subrip")):
                 out = mux_media(src, p / f"merged{ext}", srt_path=srt, meta_path=meta, ffmpeg_dir=ffdir)
                 self.assertTrue(out.is_file())
-                probe = subprocess.run(
-                    [fp, "-v", "error", "-show_streams", "-show_chapters", "-of", "json", str(out)],
-                    capture_output=True, text=True, check=True,
-                )
-                info = json.loads(probe.stdout)
+                info = _probe_json(fp, out, show_chapters=True)
                 codecs = [s["codec_name"] for s in info["streams"]]
                 self.assertIn(expected_sub_codec, codecs)
                 chapters = info["chapters"]
@@ -139,11 +144,7 @@ class TestMuxer(unittest.TestCase):
 
             burned = mux_media(src, p / "burned.mp4", srt_path=srt, meta_path=meta, ffmpeg_dir=ffdir, burn_subs=True)
             self.assertTrue(burned.is_file())
-            probe_b = subprocess.run(
-                [fp, "-v", "error", "-show_streams", "-show_chapters", "-of", "json", str(burned)],
-                capture_output=True, text=True, check=True,
-            )
-            info_b = json.loads(probe_b.stdout)
+            info_b = _probe_json(fp, burned, show_chapters=True)
             self.assertNotIn("subtitle", [s["codec_type"] for s in info_b["streams"]])
             self.assertIn("h264", [s["codec_name"] for s in info_b["streams"]])
             self.assertEqual(len(info_b["chapters"]), 2)
@@ -296,11 +297,7 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue(out.is_file())
 
-            probe = subprocess.run(
-                [fp, "-v", "error", "-show_streams", "-show_chapters", "-of", "json", str(out)],
-                capture_output=True, text=True, check=True,
-            )
-            info = json.loads(probe.stdout)
+            info = _probe_json(fp, out, show_chapters=True)
             self.assertIn("mov_text", [s["codec_name"] for s in info["streams"]])
             self.assertEqual(len(info["chapters"]), 2)
 
@@ -316,11 +313,7 @@ class TestCLI(unittest.TestCase):
             ])
             self.assertEqual(rc_burn, 0)
             self.assertTrue(out_burn.is_file())
-            probe_burn = subprocess.run(
-                [fp, "-v", "error", "-show_streams", "-of", "json", str(out_burn)],
-                capture_output=True, text=True, check=True,
-            )
-            info_burn = json.loads(probe_burn.stdout)
+            info_burn = _probe_json(fp, out_burn)
             self.assertNotIn("subtitle", [s["codec_type"] for s in info_burn["streams"]])
 
     def test_cli_url_flow_with_mocked_downloader(self):
