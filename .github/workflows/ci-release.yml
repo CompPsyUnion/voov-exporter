@@ -102,6 +102,9 @@ jobs:
     needs: verify-matrix
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment:
+      name: link2video
+      url: https://pypi.org/p/link2video
     permissions:
       contents: read
       # If using PyPI Trusted Publishing (OIDC) instead of API Token, uncomment below and remove `password:`

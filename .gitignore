@@ -5,5 +5,4 @@ dist/
 build/
 *.egg-info/
 .venv/
-tests/
 material/
