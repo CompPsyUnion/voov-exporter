@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ._utils import write_text
+from ._utils import ensure_utf8_stdio, write_text
 
 logger = logging.getLogger(__name__)
 
@@ -287,9 +287,9 @@ def _prompt_for_password(
     try:
         entered = prompt_fn(message).strip()
     except (EOFError, KeyboardInterrupt) as exc:
-        raise PermissionError("需要访问密码，但终端未输入密码（已取消）。") from exc
+        raise PermissionError("Access password required, but input was aborted.") from exc
     if not entered:
-        raise PermissionError("未输入访问密码，已取消下载。")
+        raise PermissionError("No access password entered; download cancelled.")
     return entered
 
 
@@ -312,8 +312,8 @@ def resolve_meeting_meta(
 
     if not share_id and not server_data.get("recordings"):
         raise RuntimeError(
-            f"未能从页面解析录制标识：{final_url}。"
-            "该链接可能已失效、需要登录（可通过 --cookie 传入浏览器 Cookie）或触发了验证码。"
+            f"Failed to resolve recording identifiers from {final_url}. "
+            "The link may be expired, require login (pass browser cookies via --cookie), or be gated by a CAPTCHA."
         )
 
     shares_ep = "v1/recording/shares" if is_single else "v1/shares"
@@ -351,22 +351,22 @@ def resolve_meeting_meta(
             server_data.get("code") in _PASSWORD_ERROR_CODES
         )
         if not needs_pwd:
-            raise RuntimeError(f"获取会议信息失败 (code={code}): {err_detail or msg or share_res}")
+            raise RuntimeError(f"Failed to fetch meeting metadata (code={code}): {err_detail or msg or share_res}")
 
         if attempts >= max_pwd_attempts:
-            raise PermissionError("访问密码连续多次错误，已中止。")
+            raise PermissionError("Too many incorrect password attempts; download aborted.")
 
         prompt_msg = (
-            "该腾讯会议链接需要访问密码，请输入密码（直接回车取消）: "
+            "This Tencent Meeting link requires an access password. Enter password (press Enter to cancel): "
             if attempts == 0 and not pwd
-            else "访问密码错误，请重新输入密码（直接回车取消）: "
+            else "Incorrect password. Please re-enter password (press Enter to cancel): "
         )
         pwd = _prompt_for_password(password_prompt, prompt_msg)
         attempts += 1
 
     recs = share_res.get("recordings") or server_data.get("recordings") or []
     if not recs:
-        raise RuntimeError("未找到可下载的云录制片段（recordings 为空）。")
+        raise RuntimeError("No downloadable cloud recording segments found (recordings list is empty).")
 
     rec0 = recs[0]
     meeting_info = share_res.get("meeting_info") or server_data.get("meeting_info") or {}
@@ -389,7 +389,7 @@ def resolve_meeting_meta(
     effective_share_id = share_id or str(rec0.get("sharing_id") or "")
 
     if not record_id:
-        raise RuntimeError("未能解析到 recording_id。")
+        raise RuntimeError("Failed to resolve recording_id.")
 
     return MeetingMeta(
         url=final_url,
@@ -444,7 +444,7 @@ def resolve_video_download_url(
         if signed:
             return signed
         raise RuntimeError(
-            f"签发视频下载链接失败 (code={sign_res.get('code')}): "
+            f"Failed to sign video download URL (code={sign_res.get('code')}): "
             f"{sign_res.get('err_detail') or sign_res.get('msg') or sign_res}"
         )
 
@@ -454,8 +454,8 @@ def resolve_video_download_url(
         return fallback_url
 
     raise RuntimeError(
-        f"无法获取可下载的视频轨道 (code={files_res.get('code')}): "
-        f"{files_res.get('err_detail') or files_res.get('msg') or '未找到视频文件'}"
+        f"No downloadable video track found (code={files_res.get('code')}): "
+        f"{files_res.get('err_detail') or files_res.get('msg') or 'video file missing'}"
     )
 
 
@@ -688,6 +688,7 @@ def download_meeting(
 
 
 def main() -> None:
+    ensure_utf8_stdio()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="Download Tencent Meeting video, transcript, and timeline.")
     parser.add_argument("--url", required=True, help="Tencent Meeting share URL.")

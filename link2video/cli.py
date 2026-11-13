@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from . import __version__
+from ._utils import ensure_utf8_stdio
 from .downloader import TRACK_PRIORITY, _sanitize_filename, download_meeting
 from .media import find_binary
 from .muxer import mux_media
@@ -43,8 +44,7 @@ def _resolve_output_path(output: Optional[str | Path], default_stem: str) -> Pat
 def _require_ffmpeg(ffmpeg_dir: Optional[str | Path]) -> None:
     if not find_binary("ffmpeg", ffmpeg_dir=ffmpeg_dir):
         raise FileNotFoundError(
-            "未找到 ffmpeg 可执行文件。请安装 FFmpeg 并加入 PATH，"
-            "或设置环境变量 FFMPEG_DIR，或通过 --ffmpeg-dir 指定目录。"
+            "ffmpeg binary not found. Install FFmpeg on PATH, set FFMPEG_DIR, or pass --ffmpeg-dir."
         )
 
 
@@ -128,7 +128,7 @@ def _execute_url_in_dir(
     password_prompt: Callable[[str], str],
     opts: MuxOptions,
 ) -> Path:
-    print(f"[1/3] 正在解析并下载腾讯会议录制: {url}")
+    print(f"[1/3] Resolving and downloading Tencent Meeting recording: {url}")
     dl = download_meeting(
         url=url,
         output_dir=work_path / "raw",
@@ -141,12 +141,12 @@ def _execute_url_in_dir(
     out_path = _resolve_output_path(output, safe_stem)
 
     if dl.transcript_path is None and dl.timeline_path is None:
-        logger.warning("该会议未提供逐字稿与章节数据，直接输出原视频。")
+        logger.warning("Transcript and timeline are unavailable for this recording; copying raw video.")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(dl.video_path, out_path)
         return out_path
 
-    print("[2/3] 正在生成字幕 (.srt) 与章节元数据 (.ffmeta)...")
+    print("[2/3] Generating subtitles (.srt) and chapter metadata (.ffmeta)...")
     srt_p, meta_p, stats = process_all(
         transcript_path=dl.transcript_path,
         timeline_path=dl.timeline_path,
@@ -155,10 +155,10 @@ def _execute_url_in_dir(
         base_name=safe_stem,
         ffmpeg_dir=ffmpeg_dir,
     )
-    print(f"      字幕条数: {stats.srt_cues}, 章节数: {stats.chapters}")
+    print(f"      Subtitles: {stats.srt_cues}, Chapters: {stats.chapters}")
 
-    mode_label = "烧录硬字幕（需重编码）" if opts.burn_subs else "无损封装软字幕"
-    print(f"[3/3] 正在使用 FFmpeg {mode_label} -> {out_path}")
+    mode_label = "burning hardcoded subtitles (re-encoding)" if opts.burn_subs else "losslessly muxing soft subtitles"
+    print(f"[3/3] Running FFmpeg ({mode_label}) -> {out_path}")
     return _run_mux_stage(
         video_path=dl.video_path,
         out_path=out_path,
@@ -187,9 +187,9 @@ def _execute_local_in_dir(
         base_name=video_path.stem,
         ffmpeg_dir=ffmpeg_dir,
     )
-    print(f"[1/2] 字幕条数: {stats.srt_cues}, 章节数: {stats.chapters}")
-    mode_label = "烧录硬字幕（需重编码）" if opts.burn_subs else "无损封装"
-    print(f"[2/2] 正在{mode_label} -> {out_path}")
+    print(f"[1/2] Subtitles: {stats.srt_cues}, Chapters: {stats.chapters}")
+    mode_label = "Burning hardcoded subtitles (re-encoding)" if opts.burn_subs else "Losslessly muxing"
+    print(f"[2/2] {mode_label} -> {out_path}")
     return _run_mux_stage(
         video_path=video_path,
         out_path=out_path,
@@ -232,42 +232,43 @@ def run_local_pipeline(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="link2video",
-        description="将腾讯会议录制链接（或本地导出文件）合成为带字幕和可跳转章节的 MP4/MKV 视频。",
+        description="Convert Tencent Meeting recording links (or local assets) into MP4/MKV with subtitles and chapters.",
     )
-    parser.add_argument("url", nargs="?", help="腾讯会议回放分享链接 (https://meeting.tencent.com/crm/... or /cw/...)")
-    parser.add_argument("-o", "--output", default=None, help="输出视频路径 (.mp4/.mkv) 或输出目录。")
-    parser.add_argument("-p", "--password", default=None, help="会议访问密码（若需密码且未传此参数，将在终端提示输入）。")
-    parser.add_argument("-c", "--cookie", default=None, help="可选浏览器 Cookie（用于需要登录权限的录制）。")
+    parser.add_argument("url", nargs="?", help="Tencent Meeting share URL (https://meeting.tencent.com/crm/... or /cw/...)")
+    parser.add_argument("-o", "--output", default=None, help="Output video path (.mp4/.mkv) or directory.")
+    parser.add_argument("-p", "--password", default=None, help="Meeting passcode (prompted interactively if required and omitted).")
+    parser.add_argument("-c", "--cookie", default=None, help="Optional browser Cookie header for login-protected recordings.")
     parser.add_argument(
         "--track",
         choices=list(TRACK_PRIORITY.keys()),
         default="composite",
-        help="视频轨道偏好：composite(合成视频，默认)、screen(共享屏幕)、speaker(说话人)。",
+        help="Preferred video track: composite (default), screen, or speaker.",
     )
     parser.add_argument(
         "--burn", "--hard-sub",
         dest="burn_subs",
         action="store_true",
-        help="将字幕直接烧录压制进视频画面（硬字幕，所有播放器直接可见，需要重编码）。",
+        help="Burn subtitles directly into video frames (hardsub, re-encodes via libx264).",
     )
-    parser.add_argument("--font-name", default="Microsoft YaHei", help="硬字幕字体名称（配合 --burn 使用）。")
-    parser.add_argument("--font-size", type=int, default=15, help="硬字幕字号（默认 15，配合 --burn 使用）。")
-    parser.add_argument("--preset", default="veryfast", help="x264 编码速度预设（默认 veryfast，配合 --burn 使用）。")
-    parser.add_argument("--crf", type=int, default=23, help="x264 画质 CRF 值（默认 23，越小越清晰，配合 --burn 使用）。")
-    parser.add_argument("--ffmpeg-dir", default=None, help="包含 ffmpeg/ffprobe 的目录（也可通过 FFMPEG_DIR 环境变量指定）。")
-    parser.add_argument("--keep-temp", action="store_true", help="保留下载的原视频及生成的 .srt / .ffmeta 中间文件。")
-    parser.add_argument("--work-dir", default=None, help="指定中间文件存放目录（配合 --keep-temp 使用）。")
+    parser.add_argument("--font-name", default="Microsoft YaHei", help="Font name for burned-in subtitles (used with --burn).")
+    parser.add_argument("--font-size", type=int, default=15, help="Font size for burned-in subtitles (default: 15, used with --burn).")
+    parser.add_argument("--preset", default="veryfast", help="x264 encoding preset (default: veryfast, used with --burn).")
+    parser.add_argument("--crf", type=int, default=23, help="x264 CRF quality (default: 23, lower is higher quality, used with --burn).")
+    parser.add_argument("--ffmpeg-dir", default=None, help="Directory containing ffmpeg/ffprobe binaries (or set FFMPEG_DIR).")
+    parser.add_argument("--keep-temp", action="store_true", help="Keep downloaded raw video and generated .srt/.ffmeta files.")
+    parser.add_argument("--work-dir", default=None, help="Working directory for intermediate files (used with --keep-temp).")
 
-    local_group = parser.add_argument_group("本地文件模式 (--local)")
-    local_group.add_argument("--local", action="store_true", help="使用本地视频、逐字稿与时间轴文件直接合成。")
-    local_group.add_argument("-v", "--video", default=None, help="本地视频文件路径 (.mp4)。")
-    local_group.add_argument("-t", "--transcript", default=None, help="本地逐字稿文件路径 (.md/.txt)。")
-    local_group.add_argument("-l", "--timeline", default=None, help="本地时间轴文件路径 (.md/.txt)。")
+    local_group = parser.add_argument_group("Local file mode (--local)")
+    local_group.add_argument("--local", action="store_true", help="Mux local video, transcript, and timeline files directly.")
+    local_group.add_argument("-v", "--video", default=None, help="Local video file path (.mp4).")
+    local_group.add_argument("-t", "--transcript", default=None, help="Local transcript file path (.md/.txt).")
+    local_group.add_argument("-l", "--timeline", default=None, help="Local timeline file path (.md/.txt).")
     parser.add_argument("--version", action="version", version=f"link2video {__version__}")
     return parser
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    ensure_utf8_stdio()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -282,9 +283,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         if args.local or (args.url is None and args.video is not None):
             if not args.video:
-                parser.error("--local 模式必须通过 -v/--video 指定本地视频路径。")
+                parser.error("--local mode requires -v/--video.")
             if not args.transcript and not args.timeline:
-                parser.error("--local 模式必须至少指定 -t/--transcript 或 -l/--timeline。")
+                parser.error("--local mode requires at least -t/--transcript or -l/--timeline.")
             final_path = run_local_pipeline(
                 video_path=args.video,
                 transcript_path=args.transcript,
@@ -310,7 +311,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             parser.print_help()
             return 2
 
-        print(f"[OK] 完成！输出文件: {final_path}")
+        print(f"[OK] Done! Output: {final_path}")
         return 0
     except (FileNotFoundError, PermissionError, ValueError, RuntimeError) as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)

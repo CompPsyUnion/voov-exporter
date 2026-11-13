@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
+from ._utils import ensure_utf8_stdio
 from .media import find_binary
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ def build_mux_command(
     srt_path: Optional[Path] = None,
     meta_path: Optional[Path] = None,
     subtitle_lang: str = "chi",
-    subtitle_title: str = "中文字幕",
+    subtitle_title: str = "Chinese Subtitles",
     overwrite: bool = True,
     burn_subs: bool = False,
     font_name: str = "Microsoft YaHei",
@@ -119,7 +120,7 @@ def mux_media(
     srt_path: Optional[str | Path] = None,
     meta_path: Optional[str | Path] = None,
     subtitle_lang: str = "chi",
-    subtitle_title: str = "中文字幕",
+    subtitle_title: str = "Chinese Subtitles",
     ffmpeg_dir: Optional[str | Path] = None,
     overwrite: bool = True,
     burn_subs: bool = False,
@@ -189,6 +190,7 @@ def mux_media(
 
 
 def main() -> None:
+    ensure_utf8_stdio()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="Mux MP4/MKV with soft or burned-in SRT subtitles and chapters.")
     parser.add_argument("-v", "--video", required=True, help="Input video file path.")
@@ -202,7 +204,7 @@ def main() -> None:
     parser.add_argument("--preset", default="veryfast", help="x264 preset when --burn is used (default: veryfast).")
     parser.add_argument("--crf", type=int, default=23, help="x264 CRF quality when --burn is used (default: 23).")
     parser.add_argument("--lang", default="chi", help="Subtitle ISO-639 language tag (default: chi).")
-    parser.add_argument("--sub-title", default="中文字幕", help="Subtitle stream title metadata.")
+    parser.add_argument("--sub-title", default="Chinese Subtitles", help="Subtitle stream title metadata.")
     parser.add_argument("--ffmpeg-dir", default=None, help="Directory containing ffmpeg/ffprobe binaries.")
     args = parser.parse_args()
 

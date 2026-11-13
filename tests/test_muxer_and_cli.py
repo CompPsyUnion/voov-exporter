@@ -1,3 +1,4 @@
+import io
 import json
 import subprocess
 import tempfile
@@ -209,8 +210,8 @@ class TestDownloader(unittest.TestCase):
 
         meta = resolve_meeting_meta("https://meeting.tencent.com/cw/Locked123", http, password_prompt=fake_prompt)
         self.assertEqual(len(prompts), 2)
-        self.assertIn("需要访问密码", prompts[0])
-        self.assertIn("密码错误", prompts[1])
+        self.assertIn("requires an access password", prompts[0])
+        self.assertIn("Incorrect password", prompts[1])
         self.assertEqual(meta.title, "测试会议")
         self.assertEqual(meta.pwd, "signed-pwd-token")
         self.assertEqual(meta.record_id, "r-1")
@@ -353,6 +354,20 @@ class TestCLI(unittest.TestCase):
                 ])
             self.assertEqual(rc, 0)
             self.assertTrue(out.is_file())
+
+    def test_cli_help_under_cp1252_stdout(self):
+        buf = io.BytesIO()
+        fake_out = io.TextIOWrapper(buf, encoding="cp1252", errors="strict")
+        try:
+            with patch("sys.stdout", fake_out):
+                with self.assertRaises(SystemExit) as ctx:
+                    cli_main(["--help"])
+            self.assertEqual(ctx.exception.code, 0)
+            fake_out.flush()
+            text = buf.getvalue().decode("utf-8")
+            self.assertIn("Convert Tencent Meeting recording links", text)
+        finally:
+            fake_out.detach()
 
 
 if __name__ == "__main__":

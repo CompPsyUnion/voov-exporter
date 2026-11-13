@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from ._utils import read_lines, write_text
+from ._utils import ensure_utf8_stdio, read_lines, write_text
 from .chapters import generate_ffmetadata, parse_timeline
 from .media import probe_video_duration
 from .subtitles import generate_srt, parse_transcript
@@ -74,6 +74,7 @@ def process_all(
 
 
 def main() -> None:
+    ensure_utf8_stdio()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="Convert transcript to SRT and timeline to FFmpeg chapters.")
     parser.add_argument("-t", "--transcript", help="Path to transcript text/md file.")

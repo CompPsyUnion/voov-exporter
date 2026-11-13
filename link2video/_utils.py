@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import List, Optional
+
+
+def ensure_utf8_stdio() -> None:
+    """Reconfigure stdout/stderr to UTF-8 with safe fallback to prevent cp1252 crashes on Windows."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
 
 
 def parse_hms_to_sec(h: Optional[str], m: str, s: str) -> float:
