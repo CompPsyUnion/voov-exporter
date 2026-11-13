@@ -12,11 +12,16 @@ Turn Tencent Meeting cloud recording links (or local exported recording assets) 
 ### 1. From a Tencent Meeting Share URL
 
 ```bash
-link2video "Tencent link here" -o ./meeting.mp4 --ffmpeg-dir "Your ffmpeg route here"
+# Default: fast lossless soft subtitles (mov_text) + chapters
+link2video "Tencent link here" -o ./meeting.mp4 --ffmpeg-dir "Your_ffmpeg_route_here"
+
+# Burn subtitles directly into video frames (hardsub, visible in every player)
+link2video "Tencent link here" -o ./meeting_hardsub.mp4 --burn --ffmpeg-dir "Your_ffmpeg_route_here"
 ```
 
 - If the recording is password-protected and `--password` is omitted, `link2video` prompts you in the terminal to enter the password (with retry on wrong password).
 - Optional flags:
+  - `--burn` / `--hard-sub` (burn subtitles directly into video frames via `libx264`; optional `--font-size`, `--font-name`, `--preset`, `--crf`)
   - `--track {composite,screen,speaker,audio}` (default: `composite`)
   - `-p, --password <pwd>`
   - `-c, --cookie <cookie>` (for login-restricted shares)
