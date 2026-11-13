@@ -2,11 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from link2video._utils import parse_hms_to_sec
-from link2video.chapters import generate_ffmetadata, parse_timeline
-from link2video.media import find_binary, probe_video_duration
-from link2video.processor import process_all
-from link2video.subtitles import (
+from voov_exporter._utils import parse_hms_to_sec
+from voov_exporter.chapters import generate_ffmetadata, parse_timeline
+from voov_exporter.media import find_binary, probe_video_duration
+from voov_exporter.processor import process_all
+from voov_exporter.subtitles import (
     chunk_text,
     fmt_srt,
     generate_srt,

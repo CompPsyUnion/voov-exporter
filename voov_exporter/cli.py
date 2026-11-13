@@ -99,7 +99,7 @@ def run_url_pipeline(
             opts=opts,
         )
 
-    with tempfile.TemporaryDirectory(prefix="link2video_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="voov_exporter_") as tmp:
         return _execute_url_in_dir(
             url=url,
             work_path=Path(tmp),
@@ -212,7 +212,7 @@ def run_local_pipeline(
             v_path, transcript_path, timeline_path, out_path, ffmpeg_dir, opts,
         )
 
-    with tempfile.TemporaryDirectory(prefix="link2video_local_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="voov_exporter_local_") as tmp:
         return _execute_local_in_dir(
             Path(tmp),
             v_path, transcript_path, timeline_path, out_path, ffmpeg_dir, opts,
@@ -221,7 +221,7 @@ def run_local_pipeline(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="link2video",
+        prog="voov-exporter",
         description="Convert Tencent Meeting recording links (or local assets) into MP4/MKV with subtitles and chapters.",
     )
     parser.add_argument("url", nargs="?", help="Tencent Meeting share URL (https://meeting.tencent.com/crm/... or /cw/...)")
@@ -252,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     local_group.add_argument("-v", "--video", default=None, help="Local video file path (.mp4).")
     local_group.add_argument("-t", "--transcript", default=None, help="Local transcript file path (.md/.txt).")
     local_group.add_argument("-l", "--timeline", default=None, help="Local timeline file path (.md/.txt).")
-    parser.add_argument("--version", action="version", version=f"link2video {__version__}")
+    parser.add_argument("--version", action="version", version=f"voov-exporter {__version__}")
     return parser
 
 

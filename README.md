@@ -1,4 +1,4 @@
-# link2video
+# voov-exporter
 
 Turn Tencent Meeting cloud recording links (or local exported recording assets) into a self-contained local `.mp4` / `.mkv` video with embedded soft Chinese subtitles (`.srt`) and clickable chapters (`;FFMETADATA1`).
 
@@ -13,10 +13,10 @@ Turn Tencent Meeting cloud recording links (or local exported recording assets) 
 
 ```bash
 # Default: fast lossless soft subtitles (mov_text) + chapters
-link2video "Tencent link here" -o ./meeting.mp4 --ffmpeg-dir "Your_ffmpeg_route_here"
+voov-exporter "Tencent link here" -o ./meeting.mp4 --ffmpeg-dir "Your_ffmpeg_route_here"
 
 # Burn subtitles directly into video frames (hardsub, visible in every player)
-link2video "Tencent link here" -o ./meeting_hardsub.mp4 --burn --ffmpeg-dir "Your_ffmpeg_route_here"
+voov-exporter "Tencent link here" -o ./meeting_hardsub.mp4 --burn --ffmpeg-dir "Your_ffmpeg_route_here"
 ```
 
 - Only public (no-password, no-login) recordings are fetched directly without cookies; if a link fails because it requires a password or account login, pass browser cookies via `--cookie` or download the assets manually and use `--local`.
@@ -29,7 +29,7 @@ link2video "Tencent link here" -o ./meeting_hardsub.mp4 --burn --ffmpeg-dir "You
 ### 2. Local File Fallback Mode
 
 ```bash
-link2video --local \
+voov-exporter --local \
   -v "recording.mp4" \
   -t "transcript.md" \
   -l "timeline.md" \
@@ -39,6 +39,6 @@ link2video --local \
 
 ### 3. Standalone Modules
 
-- Part 1 (Transcript + Timeline -> `.srt` + `.ffmeta`): `python -m link2video.processor ...`
-- Part 2 (Lossless FFmpeg Muxer): `python -m link2video.muxer ...`
-- Part 3 (Tencent Meeting Downloader): `python -m link2video.downloader ...`
+- Part 1 (Transcript + Timeline -> `.srt` + `.ffmeta`): `python -m voov_exporter.processor ...`
+- Part 2 (Lossless FFmpeg Muxer): `python -m voov_exporter.muxer ...`
+- Part 3 (Tencent Meeting Downloader): `python -m voov_exporter.downloader ...`

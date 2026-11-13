@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import patch
 
-from link2video.chapters import generate_ffmetadata, parse_timeline
-from link2video.cli import main as cli_main
-from link2video.downloader import (
+from voov_exporter.chapters import generate_ffmetadata, parse_timeline
+from voov_exporter.cli import main as cli_main
+from voov_exporter.downloader import (
     DownloadResult,
     _extract_js_redirect,
     _extract_rsc_payload,
@@ -18,9 +18,9 @@ from link2video.downloader import (
     resolve_video_download_url,
     summary_infos_to_timeline,
 )
-from link2video.media import find_binary
-from link2video.muxer import build_mux_command, mux_media
-from link2video.subtitles import generate_srt, parse_transcript
+from voov_exporter.media import find_binary
+from voov_exporter.muxer import build_mux_command, mux_media
+from voov_exporter.subtitles import generate_srt, parse_transcript
 
 LOCAL_FFMPEG_DIR = Path(r"D:\ffmpeg-9.0-full_build")
 
@@ -222,7 +222,7 @@ class TestDownloader(unittest.TestCase):
             },
             post_handler=lambda u, b: {},
         )
-        from link2video.downloader import MeetingMeta
+        from voov_exporter.downloader import MeetingMeta
         meta = MeetingMeta("u", "sc", "sh", "m1", "r-1", "Title")
         url = resolve_video_download_url(meta, http, track="screen")
         self.assertEqual(url, "https://cdn.example/video.mp4?token=abc")
@@ -315,7 +315,7 @@ class TestCLI(unittest.TestCase):
             tl.write_text("00:00:00 **测试章节。**说明\n", encoding="utf-8")
             out = p / "online_final.mp4"
 
-            from link2video.downloader import MeetingMeta
+            from voov_exporter.downloader import MeetingMeta
             fake_dl = DownloadResult(
                 title="在线测试会议",
                 video_path=src,
@@ -323,7 +323,7 @@ class TestCLI(unittest.TestCase):
                 timeline_path=tl,
                 meta=MeetingMeta("https://meeting.tencent.com/crm/XYZ", "XYZ", "sh", "m", "r", "在线测试会议"),
             )
-            with patch("link2video.cli.download_meeting", return_value=fake_dl):
+            with patch("voov_exporter.cli.download_meeting", return_value=fake_dl):
                 rc = cli_main([
                     "https://meeting.tencent.com/crm/XYZ",
                     "-o", str(out),

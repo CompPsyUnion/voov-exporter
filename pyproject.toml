@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "link2video"
+name = "voov-exporter"
 version = "1.0.0"
 description = "Turn Tencent Meeting recording links into local MP4/MKV videos with embedded soft/hard subtitles and clickable chapters."
 readme = "README.md"
@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 [project.scripts]
-link2video = "link2video.cli:main"
+voov-exporter = "voov_exporter.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["link2video*"]
+include = ["voov_exporter*"]
