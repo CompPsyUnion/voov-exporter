@@ -62,7 +62,10 @@ jobs:
 
       - name: Install FFmpeg (macOS)
         if: runner.os == 'macOS'
-        run: brew install ffmpeg
+        shell: bash
+        run: |
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "${GITHUB_PATH}"
 
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
@@ -71,8 +74,10 @@ jobs:
       - name: Verify FFmpeg binaries
         shell: bash
         run: |
+          which ffmpeg ffprobe
           ffmpeg -version
           ffprobe -version
+          python -c "import subprocess; out = subprocess.check_output(['ffmpeg', '-hide_banner', '-filters'], text=True); assert any(len(line.split()) >= 2 and line.split()[1] == 'subtitles' for line in out.splitlines()), 'FFmpeg lacks subtitles (libass) filter'"
 
       - name: Build sdist & wheel and validate metadata
         shell: bash
