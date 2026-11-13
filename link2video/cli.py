@@ -9,7 +9,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import List, Optional
 
 from . import __version__
 from ._utils import ensure_utf8_stdio
@@ -76,12 +76,10 @@ def run_url_pipeline(
     url: str,
     output: Optional[str | Path] = None,
     track: str = "composite",
-    password: Optional[str] = None,
     cookie: Optional[str] = None,
     ffmpeg_dir: Optional[str | Path] = None,
     keep_temp: bool = False,
     work_dir: Optional[str | Path] = None,
-    password_prompt: Callable[[str], str] = input,
     mux_options: Optional[MuxOptions] = None,
 ) -> Path:
     """Download a Tencent Meeting recording and produce a muxed MP4/MKV with subtitles & chapters."""
@@ -96,10 +94,8 @@ def run_url_pipeline(
             work_path=base_work,
             output=output,
             track=track,
-            password=password,
             cookie=cookie,
             ffmpeg_dir=ffmpeg_dir,
-            password_prompt=password_prompt,
             opts=opts,
         )
 
@@ -109,10 +105,8 @@ def run_url_pipeline(
             work_path=Path(tmp),
             output=output,
             track=track,
-            password=password,
             cookie=cookie,
             ffmpeg_dir=ffmpeg_dir,
-            password_prompt=password_prompt,
             opts=opts,
         )
 
@@ -122,10 +116,8 @@ def _execute_url_in_dir(
     work_path: Path,
     output: Optional[str | Path],
     track: str,
-    password: Optional[str],
     cookie: Optional[str],
     ffmpeg_dir: Optional[str | Path],
-    password_prompt: Callable[[str], str],
     opts: MuxOptions,
 ) -> Path:
     print(f"[1/3] Resolving and downloading Tencent Meeting recording: {url}")
@@ -133,9 +125,7 @@ def _execute_url_in_dir(
         url=url,
         output_dir=work_path / "raw",
         track=track,
-        password=password,
         cookie=cookie,
-        password_prompt=password_prompt,
     )
     safe_stem = _sanitize_filename(dl.title)
     out_path = _resolve_output_path(output, safe_stem)
@@ -236,7 +226,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("url", nargs="?", help="Tencent Meeting share URL (https://meeting.tencent.com/crm/... or /cw/...)")
     parser.add_argument("-o", "--output", default=None, help="Output video path (.mp4/.mkv) or directory.")
-    parser.add_argument("-p", "--password", default=None, help="Meeting passcode (prompted interactively if required and omitted).")
     parser.add_argument("-c", "--cookie", default=None, help="Optional browser Cookie header for login-protected recordings.")
     parser.add_argument(
         "--track",
@@ -300,7 +289,6 @@ def main(argv: Optional[List[str]] = None) -> int:
                 url=args.url,
                 output=args.output,
                 track=args.track,
-                password=args.password,
                 cookie=args.cookie,
                 ffmpeg_dir=args.ffmpeg_dir,
                 keep_temp=args.keep_temp,

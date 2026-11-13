@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ._utils import ensure_utf8_stdio, write_text
 
@@ -33,7 +33,6 @@ TRACK_PRIORITY: Dict[str, Tuple[int, ...]] = {
     "audio": (3,),
 }
 
-_PASSWORD_ERROR_CODES = {10405, 10200, 10201, 10202, 10203, 1511}
 _TRANSCRIPT_UNAVAILABLE_CODES = {30003, 30015, 30016, 30017, 30020}
 
 
@@ -83,13 +82,6 @@ def _decode_subject(raw: str) -> str:
 def _sanitize_filename(name: str, fallback: str = "tencent_meeting") -> str:
     cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", name).strip(" .")
     return cleaned[:100] or fallback
-
-
-def _is_password_error(code: Optional[int], msg: str, err_detail: str) -> bool:
-    if code in _PASSWORD_ERROR_CODES:
-        return True
-    combined = f"{msg} {err_detail}".lower()
-    return any(tok in combined for tok in ("password", "invalid pwd", "pwd", "密码"))
 
 
 class _HttpSession:
@@ -280,27 +272,8 @@ def _webtapi_qs(extra: Optional[Dict[str, Any]] = None) -> str:
     return urllib.parse.urlencode(params)
 
 
-def _prompt_for_password(
-    prompt_fn: Callable[[str], str],
-    message: str,
-) -> str:
-    try:
-        entered = prompt_fn(message).strip()
-    except (EOFError, KeyboardInterrupt) as exc:
-        raise PermissionError("Access password required, but input was aborted.") from exc
-    if not entered:
-        raise PermissionError("No access password entered; download cancelled.")
-    return entered
-
-
-def resolve_meeting_meta(
-    url: str,
-    http: _HttpSession,
-    password: Optional[str] = None,
-    password_prompt: Callable[[str], str] = input,
-    max_pwd_attempts: int = 3,
-) -> MeetingMeta:
-    """Resolve meeting metadata and handle access passwords interactively if required."""
+def resolve_meeting_meta(url: str, http: _HttpSession) -> MeetingMeta:
+    """Resolve meeting metadata for a public (or cookie-authenticated) Tencent Meeting link."""
     final_url, html = http.get_text(url)
     redir = _extract_js_redirect(html)
     if redir:
@@ -311,62 +284,41 @@ def resolve_meeting_meta(
     short_code, share_id, is_single = _parse_url_identifiers(final_url, rsc)
 
     if not share_id and not server_data.get("recordings"):
-        raise RuntimeError(
-            f"Failed to resolve recording identifiers from {final_url}. "
-            "The link may be expired, require login (pass browser cookies via --cookie), or be gated by a CAPTCHA."
+        raise PermissionError(
+            f"Unable to access recording from {final_url}. "
+            "This link may require an access password, account login (try --cookie), or have expired. "
+            "You can also download the files in your browser and run with --local."
         )
 
     shares_ep = "v1/recording/shares" if is_single else "v1/shares"
     shares_url = f"{_BASE_HOST}/wemeet-cloudrecording-webapi/{shares_ep}?c_os_model=web&c_os=web&platform=Web"
 
-    pwd = password or ""
-    share_res: Optional[Dict[str, Any]] = None
-    attempts = 0
-    while True:
-        payload = {
-            "id": share_id,
-            "pwd": pwd,
-            "short_url_code": short_code,
-            "lang": "zh",
-            "enter_from": "share",
-        }
-        share_res = http.post_json(shares_url, payload)
-        code = share_res.get("code")
-        if code == 0 and (share_res.get("recordings") or is_single):
-            break
-
-        msg = str(share_res.get("msg") or "")
-        err_detail = str(share_res.get("err_detail") or "")
-        # Fallback to SSR serverData only when link is public and no password issue is indicated.
-        if (
-            not pwd
-            and server_data.get("code") == 0
-            and server_data.get("recordings")
-            and not _is_password_error(code, msg, err_detail)
-        ):
+    payload = {
+        "id": share_id,
+        "pwd": "",
+        "short_url_code": short_code,
+        "lang": "zh",
+        "enter_from": "share",
+    }
+    share_res = http.post_json(shares_url, payload)
+    code = share_res.get("code")
+    if not (code == 0 and (share_res.get("recordings") or is_single)):
+        if server_data.get("code") == 0 and server_data.get("recordings"):
             share_res = server_data
-            break
-
-        needs_pwd = _is_password_error(code, msg, err_detail) or (
-            server_data.get("code") in _PASSWORD_ERROR_CODES
-        )
-        if not needs_pwd:
-            raise RuntimeError(f"Failed to fetch meeting metadata (code={code}): {err_detail or msg or share_res}")
-
-        if attempts >= max_pwd_attempts:
-            raise PermissionError("Too many incorrect password attempts; download aborted.")
-
-        prompt_msg = (
-            "This Tencent Meeting link requires an access password. Enter password (press Enter to cancel): "
-            if attempts == 0 and not pwd
-            else "Incorrect password. Please re-enter password (press Enter to cancel): "
-        )
-        pwd = _prompt_for_password(password_prompt, prompt_msg)
-        attempts += 1
+        else:
+            detail = share_res.get("err_detail") or share_res.get("msg") or f"code={code}"
+            raise PermissionError(
+                f"Unable to access Tencent Meeting recording ({detail}). "
+                "A password or account login may be required (try passing browser cookies via --cookie, "
+                "or download manually in your browser and use --local mode)."
+            )
 
     recs = share_res.get("recordings") or server_data.get("recordings") or []
     if not recs:
-        raise RuntimeError("No downloadable cloud recording segments found (recordings list is empty).")
+        raise PermissionError(
+            "No downloadable cloud recording found. "
+            "A password or account login may be required (try --cookie, or use --local mode)."
+        )
 
     rec0 = recs[0]
     meeting_info = share_res.get("meeting_info") or server_data.get("meeting_info") or {}
@@ -385,7 +337,7 @@ def resolve_meeting_meta(
         or short_code
         or "tencent_meeting"
     )
-    verified_pwd = str(share_res.get("pwd") or pwd or "")
+    verified_pwd = str(share_res.get("pwd") or "")
     effective_share_id = share_id or str(rec0.get("sharing_id") or "")
 
     if not record_id:
@@ -643,19 +595,12 @@ def download_meeting(
     url: str,
     output_dir: str | Path,
     track: str = "composite",
-    password: Optional[str] = None,
     cookie: Optional[str] = None,
-    password_prompt: Callable[[str], str] = input,
     http: Optional[_HttpSession] = None,
 ) -> DownloadResult:
     """Download video MP4, transcript text, and timeline text from a Tencent Meeting URL."""
     session = http or _HttpSession(cookie=cookie)
-    meta = resolve_meeting_meta(
-        url=url,
-        http=session,
-        password=password,
-        password_prompt=password_prompt,
-    )
+    meta = resolve_meeting_meta(url=url, http=session)
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     safe_base = _sanitize_filename(meta.title)
@@ -699,7 +644,6 @@ def main() -> None:
         default="composite",
         help="Video track preference (default: composite).",
     )
-    parser.add_argument("-p", "--password", default=None, help="Meeting access password (prompted if omitted & needed).")
     parser.add_argument("-c", "--cookie", default=None, help="Optional browser Cookie header for login-only links.")
     args = parser.parse_args()
 
@@ -707,7 +651,6 @@ def main() -> None:
         url=args.url,
         output_dir=args.output_dir,
         track=args.track,
-        password=args.password,
         cookie=args.cookie,
     )
     print(f"[OK] Title: {res.title}")

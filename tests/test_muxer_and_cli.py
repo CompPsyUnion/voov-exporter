@@ -170,7 +170,7 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(rsc["shortLink"], "AbCdEf123")
         self.assertEqual(rsc["serverData"]["meeting_id"], "999")
 
-    def test_password_prompt_and_retry(self):
+    def test_access_failure_prompts_password_or_account(self):
         payload = {
             "serverData": {
                 "code": 10405,
@@ -181,45 +181,29 @@ class TestDownloader(unittest.TestCase):
         }
         cw_html = f'<script>self.__next_f.push([1,{json.dumps(json.dumps(payload))}])</script>'
 
-        def fake_post(url: str, body: Dict[str, Any]) -> Dict[str, Any]:
-            self.assertIn("v1/shares", url)
-            if body["pwd"] == "":
-                return {"code": 10405, "msg": "invalid password"}
-            if body["pwd"] == "wrong":
-                return {"code": 10405, "msg": "密码错误"}
-            if body["pwd"] == "1234":
-                return {
-                    "code": 0,
-                    "meeting_id": "m-1",
-                    "subject": "5rWL6K+V5Lya6K6u",  # "测试会议" in base64
-                    "pwd": "signed-pwd-token",
-                    "recordings": [{"id": "r-1"}],
-                }
-            raise AssertionError(f"Unexpected pwd: {body['pwd']}")
-
         http = _FakeHttpSession(
             get_texts={"https://meeting.tencent.com/cw/Locked123": ("https://meeting.tencent.com/cw/Locked123", cw_html)},
             get_jsons={},
-            post_handler=fake_post,
+            post_handler=lambda u, b: {"code": 10405, "msg": "invalid password"},
         )
-        answers = iter(["wrong", "1234"])
-        prompts: List[str] = []
+        with self.assertRaises(PermissionError) as ctx:
+            resolve_meeting_meta("https://meeting.tencent.com/cw/Locked123", http)
+        msg = str(ctx.exception).lower()
+        self.assertIn("password", msg)
+        self.assertIn("account login", msg)
+        self.assertEqual(len(http.post_calls), 1)
 
-        def fake_prompt(msg: str) -> str:
-            prompts.append(msg)
-            return next(answers)
-
-        meta = resolve_meeting_meta("https://meeting.tencent.com/cw/Locked123", http, password_prompt=fake_prompt)
-        self.assertEqual(len(prompts), 2)
-        self.assertIn("requires an access password", prompts[0])
-        self.assertIn("Incorrect password", prompts[1])
-        self.assertEqual(meta.title, "测试会议")
-        self.assertEqual(meta.pwd, "signed-pwd-token")
-        self.assertEqual(meta.record_id, "r-1")
-
-        # Empty input cancels cleanly
-        with self.assertRaises(PermissionError):
-            resolve_meeting_meta("https://meeting.tencent.com/cw/Locked123", http, password_prompt=lambda _: "")
+        no_id_html = "<html><body>login required</body></html>"
+        http_no_id = _FakeHttpSession(
+            get_texts={"https://meeting.tencent.com/cw/Private": ("https://meeting.tencent.com/cw/Private", no_id_html)},
+            get_jsons={},
+            post_handler=lambda u, b: {},
+        )
+        with self.assertRaises(PermissionError) as ctx2:
+            resolve_meeting_meta("https://meeting.tencent.com/cw/Private", http_no_id)
+        msg2 = str(ctx2.exception).lower()
+        self.assertIn("password", msg2)
+        self.assertIn("account login", msg2)
 
     def test_video_track_selection_and_converters(self):
         http = _FakeHttpSession(
